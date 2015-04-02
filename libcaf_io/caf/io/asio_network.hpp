@@ -32,19 +32,19 @@
 
 #include "caf/detail/logging.hpp"
 
-namespace boost {
-namespace actor_io {
+namespace caf {
+namespace io {
 namespace network {
 
 /**
  * @brief Low-level backend for IO multiplexing.
  */
-using multiplexer = asio::io_service;
+using asio_multiplexer = boost::asio::io_service;
 
 /**
  * @brief Gets the multiplexer singleton.
  */
-multiplexer& get_multiplexer_singleton();
+asio_multiplexer& get_multiplexer_singleton();
 
 /**
  * @brief Makes sure a {@link multiplexer} does not stop its event loop
@@ -54,17 +54,17 @@ multiplexer& get_multiplexer_singleton();
  * must not exit the event loop until the destructor of the supervisor
  * has been called.
  */
-using supervisor = asio::io_service::work;
+using supervisor = boost::asio::io_service::work;
 
 /**
  * @brief Low-level socket type used as default.
  */
-using default_socket = asio::ip::tcp::socket;
+using default_socket = boost::asio::ip::tcp::socket;
 
 /**
  * @brief Low-level socket type used as default.
  */
-using default_socket_acceptor = asio::ip::tcp::acceptor;
+using default_socket_acceptor = boost::asio::ip::tcp::acceptor;
 
 /**
  * @brief Platform-specific native socket type.
@@ -88,7 +88,7 @@ enum class operation {
  * @brief A manager configures an IO device and provides callbacks
  *        for various IO operations.
  */
-class manager : public actor::ref_counted {
+class manager : public ref_counted {
 
  public:
 
@@ -163,14 +163,14 @@ class stream {
      */
     using buffer_type = std::vector<char>;
 
-    stream(multiplexer& backend) : m_writing(false), m_fd(backend) {
+    stream(asio_multiplexer& backend) : m_writing(false), m_fd(backend) {
         configure_read(receive_policy::at_most(1024));
     }
 
     /**
      * @brief Returns the @p multiplexer this stream belongs to.
      */
-    inline multiplexer& backend() {
+    inline asio_multiplexer& backend() {
         return m_fd.get_io_service();
     }
 
@@ -193,7 +193,7 @@ class stream {
      *        data to @p mgr.
      */
     void start(const manager_ptr& mgr) {
-        BOOST_ACTOR_REQUIRE(mgr != nullptr);
+        // BOOST_ACTOR_REQUIRE(mgr != nullptr);
         read_loop(mgr);
     }
 
@@ -239,7 +239,7 @@ class stream {
      *          once the stream has been started.
      */
     void flush(const manager_ptr& mgr) {
-        BOOST_ACTOR_REQUIRE(mgr != nullptr);
+        // BOOST_ACTOR_REQUIRE(mgr != nullptr);
         if (!m_wr_offline_buf.empty() && !m_writing) {
             m_writing = true;
             write_loop(mgr);
@@ -250,14 +250,14 @@ class stream {
      * @brief Closes the network connection, thus stopping this stream.
      */
     void stop() {
-        BOOST_ACTOR_LOGM_TRACE("boost::actor_io::network::stream", "");
+        CAF_LOGMF(CAF_TRACE, "");
         m_fd.close();
     }
 
     void stop_reading() {
-        BOOST_ACTOR_LOGM_TRACE("boost::actor_io::network::stream", "");
-        system::error_code ec; // ignored
-        m_fd.shutdown(asio::ip::tcp::socket::shutdown_receive, ec);
+        CAF_LOGMF(CAF_TRACE, "");
+        boost::system::error_code ec; // ignored
+        m_fd.shutdown(boost::asio::ip::tcp::socket::shutdown_receive, ec);
     }
 
  private:
@@ -269,22 +269,22 @@ class stream {
         }
         m_wr_buf.clear();
         m_wr_buf.swap(m_wr_offline_buf);
-        asio::async_write(m_fd, asio::buffer(m_wr_buf),
-                          [=](const system::error_code& ec, size_t nb) {
-            BOOST_ACTOR_LOGC_TRACE("boost::actor_io::network::stream",
-                                   "write_loop$lambda",
-                                   BOOST_ACTOR_ARG(this));
+        boost::asio::async_write(m_fd, boost::asio::buffer(m_wr_buf),
+                          [=](const boost::system::error_code& ec, size_t nb) {
+            CAF_LOGC(CAF_TRACE, "caf::io::network::stream",
+                                "write_loop$lambda",
+                                BOOST_ACTOR_ARG(this));
             static_cast<void>(nb); // silence compiler warning
             if (!ec) {
-                BOOST_ACTOR_LOGC_DEBUG("boost::actor_io::network::stream",
-                                       "write_loop$lambda",
-                                       nb << " bytes sent");
+                CAF_LOGC(CAF_DEBUG, "caf::io::network::stream",
+                                    "write_loop$lambda",
+                                    nb << " bytes sent");
                 write_loop(mgr);
             }
             else {
-                BOOST_ACTOR_LOGC_DEBUG("boost::actor_io::network::stream",
-                                       "write_loop$lambda",
-                                       "error during send: " << ec.message());
+                CAF_LOGC(CAF_DEBUG, "caf::io::network::stream",
+                                    "write_loop$lambda",
+                                    "error during send: " << ec.message());
                 mgr->io_failure(operation::read, ec.message());
                 m_writing = false;
             }
@@ -292,10 +292,10 @@ class stream {
     }
 
     void read_loop(const manager_ptr& mgr) {
-        auto cb = [=](const system::error_code& ec, size_t read_bytes) {
-            BOOST_ACTOR_LOGC_TRACE("boost::actor_io::network::stream",
-                                   "read_loop$cb",
-                                   BOOST_ACTOR_ARG(this));
+        auto cb = [=](const boost::system::error_code& ec, size_t read_bytes) {
+            CAF_LOGC(CAF_TRACE, "caf::io::network::stream",
+                                "read_loop$cb",
+                                CAF_ARG(this));
             if (!ec) {
                 mgr->consume(m_rd_buf.data(), read_bytes);
                 read_loop(mgr);
@@ -305,11 +305,11 @@ class stream {
         switch (m_rd_flag) {
             case receive_policy_flag::exactly:
                 if (m_rd_buf.size() < m_rd_size) m_rd_buf.resize(m_rd_size);
-                asio::async_read(m_fd, asio::buffer(m_rd_buf, m_rd_size), cb);
+                boost::asio::async_read(m_fd, boost::asio::buffer(m_rd_buf, m_rd_size), cb);
                 break;
             case receive_policy_flag::at_most:
                 if (m_rd_buf.size() < m_rd_size) m_rd_buf.resize(m_rd_size);
-                m_fd.async_read_some(asio::buffer(m_rd_buf, m_rd_size), cb);
+                m_fd.async_read_some(boost::asio::buffer(m_rd_buf, m_rd_size), cb);
                 break;
             case receive_policy_flag::at_least: {
                 // read up to 10% more, but at least allow 100 bytes more
@@ -323,12 +323,12 @@ class stream {
     }
 
     void collect_data(const manager_ptr& mgr, size_t collected_bytes) {
-        m_fd.async_read_some(asio::buffer(m_rd_buf.data() + collected_bytes,
+        m_fd.async_read_some(boost::asio::buffer(m_rd_buf.data() + collected_bytes,
                                           m_rd_buf.size() - collected_bytes),
-                            [=](const system::error_code& ec, size_t nb) {
-            BOOST_ACTOR_LOGC_TRACE("boost::actor_io::network::stream",
-                                   "collect_data$lambda",
-                                   BOOST_ACTOR_ARG(this));
+                            [=](const boost::system::error_code& ec, size_t nb) {
+            CAF_LOGC(CAF_TRACE, "caf::io::network::stream",
+                                "collect_data$lambda",
+                                CAF_ARG(this));
             if (!ec) {
                 auto sum = collected_bytes + nb;
                 if (sum >= m_rd_size) {
@@ -374,7 +374,7 @@ template<class SocketAcceptor>
 class acceptor {
 
     using protocol_type = typename SocketAcceptor::protocol_type;
-    using socket_type   = asio::basic_stream_socket<protocol_type>;
+    using socket_type   = boost::asio::basic_stream_socket<protocol_type>;
 
  public:
 
@@ -388,13 +388,13 @@ class acceptor {
      */
     using manager_ptr = intrusive_ptr<manager_type>;
 
-    acceptor(multiplexer& backend)
+    acceptor(asio_multiplexer& backend)
     : m_backend(backend), m_accept_fd(backend), m_fd(backend) { }
 
     /**
      * @brief Returns the @p multiplexer this acceptor belongs to.
      */
-    inline multiplexer& backend() {
+    inline asio_multiplexer& backend() {
         return m_backend;
     }
 
@@ -426,7 +426,7 @@ class acceptor {
      *        acceptor has been closed or an IO error occured.
      */
     void start(const manager_ptr& mgr) {
-        BOOST_ACTOR_REQUIRE(mgr != nullptr);
+        // BOOST_ACTOR_REQUIRE(mgr != nullptr);
         accept_loop(mgr);
     }
 
@@ -440,8 +440,8 @@ class acceptor {
  private:
 
     void accept_loop(const manager_ptr& mgr) {
-        m_accept_fd.async_accept(m_fd, [=](const system::error_code& ec) {
-            BOOST_ACTOR_LOGM_TRACE("boost::actor_io::network::acceptor", "");
+        m_accept_fd.async_accept(m_fd, [=](const boost::system::error_code& ec) {
+            CAF_LOGMF(CAF_TRACE, "");
             if (!ec) {
                 mgr->new_connection(); // probably moves m_fd
                 // reset m_fd for next accept operation
@@ -452,7 +452,7 @@ class acceptor {
         });
     }
 
-    multiplexer&   m_backend;
+    asio_multiplexer&   m_backend;
     SocketAcceptor m_accept_fd;
     socket_type    m_fd;
 
@@ -461,15 +461,15 @@ class acceptor {
 template<class Socket>
 void ipv4_connect(Socket& fd, const std::string& host, uint16_t port) {
     CAF_LOGF_TRACE(CAF_ARG(host) << ", " CAF_ARG(port));
-    using asio::ip::tcp;
+    using boost::asio::ip::tcp;
     try {
         tcp::resolver r(fd.get_io_service());
         tcp::resolver::query q(tcp::v4(), host, std::to_string(port));
         auto i = r.resolve(q);
-        asio::connect(fd, i);
+        boost::asio::connect(fd, i);
     }
-    catch (system::system_error& se) {
-        throw actor::network_error(se.code().message());
+    catch (boost::system::system_error& se) {
+        throw network_error(se.code().message());
     }
 }
 
@@ -484,8 +484,8 @@ template<class SocketAcceptor>
 void ipv4_bind(SocketAcceptor& fd,
                uint16_t port,
                const char* addr = nullptr) {
-    BOOST_ACTOR_LOGF_TRACE(BOOST_ACTOR_ARG(port));
-    using asio::ip::tcp;
+    CAF_LOGF_TRACE(BOOST_ACTOR_ARG(port));
+    using boost::asio::ip::tcp;
     try {
         auto bind_and_listen = [&](tcp::endpoint& ep) {
             fd.open(ep.protocol());
@@ -494,7 +494,7 @@ void ipv4_bind(SocketAcceptor& fd,
             fd.listen();
         };
         if (addr) {
-            tcp::endpoint ep(asio::ip::address::from_string(addr), port);
+            tcp::endpoint ep(boost::asio::ip::address::from_string(addr), port);
             bind_and_listen(ep);
         }
         else {
@@ -502,11 +502,11 @@ void ipv4_bind(SocketAcceptor& fd,
             bind_and_listen(ep);
         }
     }
-    catch (system::system_error& se) {
-        if (se.code() == system::errc::address_in_use) {
-            throw actor::bind_failure(se.code().message());
+    catch (boost::system::system_error& se) {
+        if (se.code() == boost::system::errc::address_in_use) {
+            throw bind_failure(se.code().message());
         }
-        throw actor::network_error(se.code().message());
+        throw network_error(se.code().message());
     }
 }
 
@@ -517,8 +517,8 @@ inline default_socket_acceptor new_ipv4_acceptor(uint16_t port,
     return fd;
 }
 
-} // namespace network
-} // namespace actor_io
+} // namespace caf
+} // namespace io
 } // namespace boost
 
 #endif // CAF_IO_ASIO_NETWORK_HPP
