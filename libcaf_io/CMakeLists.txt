@@ -65,7 +65,7 @@ if (CAF_USE_ASIO)
     set(Boost_USE_STATIC_LIBS ON) # only find static libs
   endif()
   set(Boost_USE_MULTITHREADED ON)
-  find_package(Boost REQUIRED COMPONENTS ) #system thread regex)
+  find_package(Boost REQUIRED COMPONENTS system)
   if (Boost_FOUND)
     set(INCLUDE_DIRS "${INCLUDE_DIRS} ${Boost_INCLUDE_DIRS}")
     set(LD_DIRS ${LD_DIRS} ${Boost_LIBRARIES})
