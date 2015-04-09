@@ -310,6 +310,21 @@ endif()
 # all projects need the headers of the core components
 include_directories("${LIBCAF_INCLUDE_DIRS}")
 
+# Find boost asio if the asio multiplexer should be used
+if (CAF_USE_ASIO)
+  if (CAF_BUILD_STATIC_ONLY)
+    set(Boost_USE_STATIC_LIBS ON) # only find static libs
+  endif()
+  set(Boost_USE_MULTITHREADED ON)
+  find_package(Boost REQUIRED COMPONENTS system)
+  if (Boost_FOUND)
+    # set(CMAKE_EXE_LINKER_FLAGS -L${Boost_LIBRARY_DIRS})
+    set(INCLUDE_DIRS "${INCLUDE_DIRS} ${Boost_INCLUDE_DIRS}")
+    set(LD_DIRS ${LD_DIRS} ${Boost_LIBRARIES})
+    set(LD_FLAGS ${LD_FLAGS} ${Boost_SYSTEM_LIBRARY})
+  endif()
+endif()
+
 
 ################################################################################
 #                               add subprojects                                #
