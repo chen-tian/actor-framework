@@ -79,7 +79,8 @@ class asio_multiplexer : public multiplexer {
 
   void assign_tcp_scribe(broker*, connection_handle hdl) override;
 
-  connection_handle add_tcp_scribe(broker*, default_socket&& sock);
+  template<class Socket>
+  connection_handle add_tcp_scribe(broker*, Socket&& sock);
 
   connection_handle add_tcp_scribe(broker*, native_socket fd) override;
 
@@ -96,7 +97,7 @@ class asio_multiplexer : public multiplexer {
   accept_handle add_tcp_doorman(broker*, native_socket fd) override;
 
   std::pair<accept_handle, uint16_t>
-  add_tcp_doorman(broker*, uint16_t p, const char* in, bool rflag) override;
+  add_tcp_doorman(broker*, uint16_t port, const char* in, bool rflag) override;
 
   void dispatch_runnable(runnable_ptr ptr) override;
 
@@ -115,8 +116,10 @@ class asio_multiplexer : public multiplexer {
   }
 
   io_backend m_backend;
-  std::mutex m_mtx;
+  std::mutex m_mtx_sockets;
+  std::mutex m_mtx_acceptors;
   std::map<int64_t,default_socket> m_unassigned_sockets;
+  std::map<int64_t,default_socket_acceptor> m_unassigned_acceptors;
 };
 
 asio_multiplexer& get_multiplexer_singleton();
@@ -353,90 +356,86 @@ class stream {
  */
 template<class SocketAcceptor>
 class acceptor {
-
-    using protocol_type = typename SocketAcceptor::protocol_type;
-    using socket_type   = boost::asio::basic_stream_socket<protocol_type>;
+  using protocol_type = typename SocketAcceptor::protocol_type;
+  using socket_type   = boost::asio::basic_stream_socket<protocol_type>;
 
  public:
+  /**
+   * @brief A manager providing the @p accept member function.
+   */
+  using manager_type = acceptor_manager;
 
-    /**
-     * @brief A manager providing the @p accept member function.
-     */
-    using manager_type = acceptor_manager;
+  /**
+   * @brief A smart pointer to an acceptor manager.
+   */
+  using manager_ptr = intrusive_ptr<manager_type>;
 
-    /**
-     * @brief A smart pointer to an acceptor manager.
-     */
-    using manager_ptr = intrusive_ptr<manager_type>;
+  acceptor(io_backend& io, asio_multiplexer& backend)
+  : m_backend(backend), m_accept_fd(io), m_fd(io) { }
 
-    acceptor(io_backend& backend)
-    : m_backend(backend), m_accept_fd(backend), m_fd(backend) { }
+  /**
+   * @brief Returns the @p multiplexer this acceptor belongs to.
+   */
+  inline asio_multiplexer& backend() {
+    return m_backend;
+  }
 
-    /**
-     * @brief Returns the @p multiplexer this acceptor belongs to.
-     */
-    inline io_backend& backend() {
-        return m_backend;
-    }
+  /**
+   * @brief Returns the IO socket.
+   */
+  inline SocketAcceptor& socket_handle() {
+    return m_accept_fd;
+  }
 
-    /**
-     * @brief Returns the IO socket.
-     */
-    inline SocketAcceptor& socket_handle() {
-        return m_accept_fd;
-    }
+  /**
+   * @brief Returns the accepted socket. This member function should
+   *        be called only from the @p new_connection callback.
+   */
+  inline socket_type& accepted_socket() {
+    return m_fd;
+  }
 
-    /**
-     * @brief Returns the accepted socket. This member function should
-     *        be called only from the @p new_connection callback.
-     */
-    inline socket_type& accepted_socket() {
-        return m_fd;
-    }
+  /**
+   * @brief Initializes this acceptor, setting the socket handle to @p fd.
+   */
+  void init(SocketAcceptor fd) {
+    m_accept_fd = std::move(fd);
+  }
 
-    /**
-     * @brief Initializes this acceptor, setting the socket handle to @p fd.
-     */
-    void init(SocketAcceptor fd) {
-        m_accept_fd = std::move(fd);
-    }
+  /**
+   * @brief Starts this acceptor, forwarding all incoming connections to
+   *        @p manager. The intrusive pointer will be released after the
+   *        acceptor has been closed or an IO error occured.
+   */
+  void start(const manager_ptr& mgr) {
+    // BOOST_ACTOR_REQUIRE(mgr != nullptr);
+    accept_loop(mgr);
+  }
 
-    /**
-     * @brief Starts this acceptor, forwarding all incoming connections to
-     *        @p manager. The intrusive pointer will be released after the
-     *        acceptor has been closed or an IO error occured.
-     */
-    void start(const manager_ptr& mgr) {
-        // BOOST_ACTOR_REQUIRE(mgr != nullptr);
-        accept_loop(mgr);
-    }
-
-    /**
-     * @brief Closes the network connection, thus stopping this acceptor.
-     */
-    void stop() {
-        m_accept_fd.close();
-    }
+  /**
+   * @brief Closes the network connection, thus stopping this acceptor.
+   */
+  void stop() {
+      m_accept_fd.close();
+  }
 
  private:
+  void accept_loop(const manager_ptr& mgr) {
+    m_accept_fd.async_accept(m_fd, [=](const boost::system::error_code& ec) {
+      CAF_LOGMF(CAF_TRACE, "");
+      if (!ec) {
+        mgr->new_connection(); // probably moves m_fd
+        // reset m_fd for next accept operation
+        m_fd = socket_type{m_accept_fd.get_io_service()};
+        accept_loop(mgr);
+      }
+      else mgr->io_failure(operation::read);
+    });
+  }
 
-    void accept_loop(const manager_ptr& mgr) {
-        m_accept_fd.async_accept(m_fd, [=](const boost::system::error_code& ec) {
-            CAF_LOGMF(CAF_TRACE, "");
-            if (!ec) {
-                mgr->new_connection(); // probably moves m_fd
-                // reset m_fd for next accept operation
-                m_fd = socket_type{m_accept_fd.get_io_service()};
-                accept_loop(mgr);
-            }
-            else mgr->io_failure(operation::read);
-        });
-    }
-
-    io_backend&   m_backend;
-    SocketAcceptor m_accept_fd;
-    socket_type    m_fd;
-
+  asio_multiplexer& m_backend;
+  SocketAcceptor    m_accept_fd;
+  socket_type       m_fd;
 };
 
 
