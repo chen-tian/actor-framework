@@ -41,16 +41,6 @@ namespace network {
 using io_backend = boost::asio::io_service;
 
 /**
- * @brief Makes sure a {@link multiplexer} does not stop its event loop
- *        before the application requests a shutdown.
- *
- * The supervisor informs the multiplexer in its constructor that it
- * must not exit the event loop until the destructor of the supervisor
- * has been called.
- */
-using supervisor = boost::asio::io_service::work;
-
-/**
  * @brief Low-level socket type used as default.
  */
 using default_socket = boost::asio::ip::tcp::socket;
@@ -69,6 +59,15 @@ using native_socket = typename default_socket::native_handle_type;
  * @brief Platform-specific native acceptor socket type.
  */
 using native_socket_acceptor = typename default_socket_acceptor::native_handle_type;
+
+/**
+ * @brief A wrapper for the supervisor backend provided by boost::asio.
+ */
+struct asio_supervisor : public multiplexer::supervisor {
+  asio_supervisor(io_backend& iob) : work(iob) { }
+ private:
+  boost::asio::io_service::work work;
+};
 
 class asio_multiplexer : public multiplexer {
  public:
@@ -273,7 +272,7 @@ class stream {
                           [=](const boost::system::error_code& ec, size_t nb) {
             CAF_LOGC(CAF_TRACE, "caf::io::network::stream",
                                 "write_loop$lambda",
-                                BOOST_ACTOR_ARG(this));
+                                CAF_ARG(this));
             static_cast<void>(nb); // silence compiler warning
             if (!ec) {
                 CAF_LOGC(CAF_DEBUG, "caf::io::network::stream",
