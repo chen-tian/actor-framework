@@ -90,7 +90,7 @@ connection_handle asio_multiplexer::new_tcp_scribe(const std::string& host,
 void asio_multiplexer::assign_tcp_scribe(broker* self, connection_handle hdl) {
   std::lock_guard<std::mutex> lock(m_mtx_sockets);
   auto itr = m_unassigned_sockets.find(hdl.id());
-  if (itr == m_unassigned_sockets.end()) {
+  if (itr != m_unassigned_sockets.end()) {
     add_tcp_scribe(self, std::move(itr->second));
     m_unassigned_sockets.erase(itr);
   }
@@ -172,10 +172,8 @@ asio_multiplexer::new_tcp_doorman(uint16_t port, const char* in, bool rflag) {
   default_socket_acceptor fd{backend()};
   ip_bind(fd, port, in, rflag);
   auto id = int64_from_native_socket(fd.native_handle());
-  std::lock_guard<std::mutex> lock(m_mtx_acceptors);
   auto assigned_port = fd.local_endpoint().port();
-  CAF_LOG_DEBUG("Created accept handle" << fd.local_endpoint().address() << ":"
-                                        << fd.local_endpoint().port());
+  std::lock_guard<std::mutex> lock(m_mtx_acceptors);
   m_unassigned_acceptors.insert(std::make_pair(id, std::move(fd)));
   return {accept_handle::from_int(id), assigned_port};
 }
