@@ -182,7 +182,7 @@ void asio_multiplexer::assign_tcp_doorman(broker* self, accept_handle hdl) {
   CAF_LOG_TRACE("");
   std::lock_guard<std::mutex> lock(m_mtx_acceptors);
   auto itr = m_unassigned_acceptors.find(hdl.id());
-  if (itr == m_unassigned_acceptors.end()) {
+  if (itr != m_unassigned_acceptors.end()) {
     add_tcp_doorman(self, std::move(itr->second));
     m_unassigned_acceptors.erase(itr);
   }
