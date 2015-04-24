@@ -369,7 +369,7 @@ class acceptor {
    */
   using manager_ptr = intrusive_ptr<manager_type>;
 
-  acceptor(io_backend& io, asio_multiplexer& backend)
+  acceptor(asio_multiplexer& backend, io_backend& io)
   : m_backend(backend), m_accept_fd(io), m_fd(io) { }
 
   /**
@@ -407,7 +407,6 @@ class acceptor {
    *        acceptor has been closed or an IO error occured.
    */
   void start(const manager_ptr& mgr) {
-    // BOOST_ACTOR_REQUIRE(mgr != nullptr);
     accept_loop(mgr);
   }
 

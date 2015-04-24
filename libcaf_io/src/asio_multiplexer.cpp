@@ -196,8 +196,7 @@ accept_handle asio_multiplexer::add_tcp_doorman(broker* self,
    public:
     impl(broker* ptr, default_socket_acceptor&& s, network::asio_multiplexer& am)
         : doorman(ptr, network::accept_hdl_from_socket(s)),
-          m_fd(std::move(s)),
-          m_acceptor(s.get_io_service(), am) {
+          m_acceptor(am, s.get_io_service()) {
       m_acceptor.init(std::move(s));
     }
     void new_connection() override {
@@ -218,7 +217,6 @@ accept_handle asio_multiplexer::add_tcp_doorman(broker* self,
       m_acceptor.start(this);
     }
    private:
-    network::default_socket_acceptor m_fd;
     network::acceptor<default_socket_acceptor> m_acceptor;
   };
   broker::doorman_pointer ptr = make_counted<impl>(self, std::move(sock), *this);
