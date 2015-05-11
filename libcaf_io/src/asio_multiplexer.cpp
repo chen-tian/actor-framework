@@ -21,6 +21,7 @@
 #include "caf/exception.hpp"
 
 #include "caf/io/broker.hpp"
+#include "caf/io/middleman.hpp"
 
 #include "caf/io/network/asio_multiplexer.hpp"
 
@@ -269,6 +270,10 @@ void asio_multiplexer::run() {
   if (ec) {
     throw std::runtime_error(ec.message());
   }
+}
+
+asio_multiplexer& get_multiplexer_singleton() {
+  return static_cast<asio_multiplexer&>(middleman::instance()->backend());
 }
 
 } // namesapce network
