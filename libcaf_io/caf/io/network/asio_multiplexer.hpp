@@ -210,7 +210,7 @@ class stream {
   void write(const void* buf, size_t num_bytes) {
     auto first = reinterpret_cast<const char*>(buf);
     auto last  = first + num_bytes;
-    m_wr_offline_buf.insert(first, last);
+    m_wr_offline_buf.insert(m_wr_offline_buf.end(), first, last);
   }
 
   /**
