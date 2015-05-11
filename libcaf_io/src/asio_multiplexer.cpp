@@ -28,7 +28,6 @@ namespace caf {
 namespace io {
 namespace network {
 
-
 default_socket new_tcp_connection(io_backend& backend,
                                   const std::string& host, uint16_t port) {
   default_socket fd{backend};
@@ -38,8 +37,7 @@ default_socket new_tcp_connection(io_backend& backend,
     tcp::resolver::query q(host, std::to_string(port));
     auto i = r.resolve(q);
     boost::asio::connect(fd, i);
-  }
-  catch (boost::system::system_error& se) {
+  } catch (boost::system::system_error& se) {
     throw network_error(se.code().message());
   }
   return fd;
@@ -62,8 +60,7 @@ void ip_bind(default_socket_acceptor& fd,
       bind_and_listen(ep);
       CAF_LOGF_DEBUG("created IPv6 endpoint: " << ep.address() << ":"
                      << fd.local_endpoint().port());
-    }
-    else {
+    } else {
       tcp::endpoint ep(tcp::v6(), port);
       bind_and_listen(ep);
       CAF_LOGF_DEBUG("created IPv6 endpoint: " << ep.address() << ":"
@@ -111,7 +108,9 @@ connection_handle asio_multiplexer::add_tcp_scribe(broker* self,
     void configure_read(receive_policy::config config) override {
       CAF_LOG_TRACE("");
       m_stream.configure_read(config);
-      if (!m_launched) launch();
+      if (!m_launched) {
+        launch();
+      }
     }
     broker::buffer_type& wr_buf() override {
       return m_stream.wr_buf();
@@ -162,7 +161,7 @@ connection_handle asio_multiplexer::add_tcp_scribe(broker* self,
                                                    const std::string& host,
                                                    uint16_t port) {
   CAF_LOG_TRACE(CAF_ARG(self) << ", " << CAF_ARG(host)
-                << ":" << CAF_ARG(port));
+                              << ":" << CAF_ARG(port));
   return add_tcp_scribe(self, new_tcp_connection(backend(), host, port));
 }
 
@@ -255,13 +254,9 @@ void asio_multiplexer::dispatch_runnable(runnable_ptr ptr) {
   });
 }
 
-asio_multiplexer::asio_multiplexer() {
+asio_multiplexer::asio_multiplexer() { }
 
-}
-
-asio_multiplexer::~asio_multiplexer() {
-
-}
+asio_multiplexer::~asio_multiplexer() { }
 
 multiplexer::supervisor_ptr asio_multiplexer::make_supervisor() {
   return std::unique_ptr<asio_supervisor>(new asio_supervisor(backend()));
